@@ -1,7 +1,7 @@
 <template>
   <div class="login-container">
     <div class="login-card">
-      <h2>動画共有システム</h2>
+      <h2>宣原動画共有システム</h2>
       <h2>ログイン</h2>
       
       <form @submit.prevent="handleLogin">
