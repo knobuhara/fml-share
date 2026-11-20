@@ -88,10 +88,20 @@
       <div class="video-modal-content">
         <button class="btn-close" @click="selectedVideo = null">×</button>
         <div class="video-player-wrapper">
-          <video :src="selectedVideo.playback_url" width="100%" height="auto" controls>
+          <video
+            ref="videoPlayer"
+            :src="selectedVideo.playback_url"
+            width="100%"
+            height="auto"
+            controls
+            autoplay
+            playsinline
+            @error="handlePlaybackError"
+          >
             Your browser does not support the video tag.
           </video>
         </div>
+        <p v-if="playbackError" class="playback-error">{{ playbackError }}</p>
         <h3>{{ selectedVideo.title }}</h3>
       </div>
     </div>
@@ -112,7 +122,8 @@ export default {
       error: null,
       userName: 'ユーザー',
       selectedVideo: null,
-      downloadingId: null
+      downloadingId: null,
+      playbackError: null
     }
   },
   watch: {
@@ -150,7 +161,25 @@ export default {
     },
 
     playVideo(video) {
-      this.selectedVideo = video
+      this.playbackError = null
+      this.selectedVideo = {
+        ...video,
+        playback_url: api.getUrl(video.playback_url)
+      }
+      this.$nextTick(() => {
+        const player = this.$refs.videoPlayer
+        if (!player) return
+
+        player.play().catch(error => {
+          this.playbackError = error.name === 'NotAllowedError'
+            ? '自動再生がブロックされました。動画内の再生ボタンを押してください。'
+            : '動画を再生できませんでした。再生URLと動画形式を確認してください。'
+        })
+      })
+    },
+
+    handlePlaybackError() {
+      this.playbackError = '動画を読み込めません。再生URL、アクセス権、動画形式を確認してください。'
     },
 
     async downloadVideo(video) {
@@ -549,6 +578,13 @@ export default {
   width: 100%;
   height: auto;
   display: block;
+}
+
+.playback-error {
+  margin: 0;
+  padding: 0.75rem 1rem;
+  color: #b42318;
+  background: #fef3f2;
 }
 
 .btn-close {
