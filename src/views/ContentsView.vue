@@ -1,7 +1,7 @@
 <template>
   <div class="contents-container">
     <header class="header">
-      <h1>動画一覧</h1>
+      <h1>宣原動画一覧</h1>
       <div class="header-actions">
         <span class="user-info">{{ userName }}</span>
         <button class="btn-logout" @click="handleLogout">ログアウト</button>

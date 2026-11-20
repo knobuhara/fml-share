@@ -1,7 +1,7 @@
 <template>
   <div class="register-container">
     <div class="register-card">
-      <h2>動画共有システム</h2>
+      <h2>宣原動画共有システム</h2>
       <h2>新規登録</h2>
       
       <form @submit.prevent="handleRegister">
