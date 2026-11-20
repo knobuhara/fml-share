@@ -80,6 +80,10 @@ class ApiService {
     })
   }
 
+  getUrl(endpoint) {
+    return `${this.baseURL}/${endpoint.replace(/^\/+/, '')}`
+  }
+
   /**
    * Download video file
    */
