@@ -1,7 +1,10 @@
 <template>
   <div class="contents-container">
     <header class="header">
-      <h1>宣原動画一覧</h1>
+      <div class="header-left">
+        <h1>宣原動画一覧</h1>
+        <img :src="akiokaImage" alt="akioka" class="header-image" />
+      </div>
       <div class="header-actions">
         <span class="user-info">{{ userName }}</span>
         <button class="btn-logout" @click="handleLogout">ログアウト</button>
@@ -193,11 +196,13 @@
 
 <script>
 import api from '@/services/api'
+import akiokaImage from '@/../resource/akioka.jpg'
 
 export default {
   name: 'ContentsView',
   data() {
     return {
+      akiokaImage,
       videos: [],
       filteredVideos: [],
       searchQuery: '',
@@ -494,9 +499,21 @@ export default {
   align-items: center;
 }
 
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+
 .header h1 {
   margin: 0;
   color: #333;
+}
+
+.header-image {
+  height: 60px;
+  object-fit: contain;
+  border-radius: 5px;
 }
 
 .header-actions {
