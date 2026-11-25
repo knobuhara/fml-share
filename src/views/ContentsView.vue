@@ -17,6 +17,17 @@
           class="search-input"
         />
         <button @click="fetchVideos" class="btn-refresh">更新</button>
+        <button @click="triggerFileInput" class="btn-upload" :disabled="uploading">
+          <span v-if="uploading" class="btn-spinner"></span>
+          {{ uploading ? 'アップロード中...' : 'アップロード' }}
+        </button>
+        <input
+          ref="fileInput"
+          type="file"
+          accept="video/*"
+          style="display: none"
+          @change="handleFileSelect"
+        />
       </div>
 
       <div v-if="loading" class="loading">
@@ -27,6 +38,18 @@
       <div v-else-if="error" class="error">
         <p>エラーが発生しました: {{ error }}</p>
         <button @click="fetchVideos" class="btn-retry">再試行</button>
+      </div>
+
+      <div v-if="uploadSuccess" class="upload-success">
+        <p>✓ 動画がアップロードされました。動画情報がDBに登録されています。</p>
+        <button @click="uploadSuccess = false" class="btn-close-message">×</button>
+      </div>
+
+      <div v-if="uploadProgress > 0 && uploadProgress < 100" class="upload-progress">
+        <p>アップロード中: {{ Math.round(uploadProgress) }}%</p>
+        <div class="progress-bar">
+          <div class="progress-fill" :style="{ width: uploadProgress + '%' }"></div>
+        </div>
       </div>
 
       <div v-else-if="filteredVideos.length === 0" class="no-videos">
@@ -77,11 +100,71 @@
               <span v-if="downloadingId === video.id" class="btn-spinner"></span>
               {{ downloadingId === video.id ? 'ダウンロード中...' : 'ダウンロード' }}
             </button>
+            <button 
+              v-if="isAdmin && video.id" 
+              @click="deleteVideo(video)" 
+              class="btn-delete"
+              :disabled="deletingId === video.id"
+            >
+              <span v-if="deletingId === video.id" class="btn-spinner"></span>
+              {{ deletingId === video.id ? '削除中...' : '削除' }}
+            </button>
           </div>
         </div>
       </div>
 
     </main>
+
+    <!-- Upload Info Modal -->
+    <div v-if="showUploadModal" class="upload-modal" @click.self="closeUploadModal">
+      <div class="upload-modal-content">
+        <div class="modal-header">
+          <h2>動画をアップロード</h2>
+          <button class="btn-close-modal" @click="closeUploadModal">×</button>
+        </div>
+
+        <div class="modal-body">
+          <div class="file-info">
+            <p><strong>ファイル:</strong> {{ uploadFile?.name }}</p>
+            <p><strong>サイズ:</strong> {{ uploadFile ? formatFileSize(uploadFile.size) : '-' }}</p>
+          </div>
+
+          <div class="form-group">
+            <label for="upload-title">タイトル <span class="required">*</span></label>
+            <input
+              id="upload-title"
+              v-model="uploadForm.title"
+              type="text"
+              placeholder="動画のタイトルを入力"
+              class="form-input"
+              maxlength="255"
+            />
+            <span class="char-count">{{ uploadForm.title.length }}/255</span>
+            <span v-if="uploadErrors.title" class="error-text">{{ uploadErrors.title }}</span>
+          </div>
+
+          <div class="form-group">
+            <label for="upload-description">説明</label>
+            <textarea
+              id="upload-description"
+              v-model="uploadForm.description"
+              placeholder="動画の説明を入力（オプション）"
+              class="form-textarea"
+              maxlength="1000"
+              rows="4"
+            ></textarea>
+            <span class="char-count">{{ uploadForm.description.length }}/1000</span>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button @click="closeUploadModal" class="btn-cancel">キャンセル</button>
+          <button @click="confirmUpload" class="btn-confirm" :disabled="!isUploadFormValid">
+            アップロード
+          </button>
+        </div>
+      </div>
+    </div>
 
     <!-- Video Player Modal -->
     <div v-if="selectedVideo" class="video-modal" @click.self="selectedVideo = null">
@@ -121,14 +204,36 @@ export default {
       loading: true,
       error: null,
       userName: 'ユーザー',
+      userRole: 'user',
       selectedVideo: null,
       downloadingId: null,
-      playbackError: null
+      deletingId: null,
+      playbackError: null,
+      uploading: false,
+      uploadProgress: 0,
+      uploadSuccess: false,
+      showUploadModal: false,
+      uploadFile: null,
+      uploadForm: {
+        title: '',
+        description: ''
+      },
+      uploadErrors: {
+        title: ''
+      }
     }
   },
   watch: {
     searchQuery() {
       this.filterVideos()
+    }
+  },
+  computed: {
+    isUploadFormValid() {
+      return this.uploadForm.title.trim().length >= 1 && this.uploadForm.title.length <= 255
+    },
+    isAdmin() {
+      return this.userRole === 'admin'
     }
   },
   methods: {
@@ -196,6 +301,30 @@ export default {
       }
     },
 
+    async deleteVideo(video) {
+      if (this.deletingId) return
+      
+      if (!confirm(`「${video.title}」を削除してもよろしいですか？\n\nFTPサーバーとDBの両方から削除されます。`)) {
+        return
+      }
+
+      try {
+        this.deletingId = video.id
+        await api.deleteVideo(video.id)
+        
+        // Remove from list
+        this.videos = this.videos.filter(v => v.id !== video.id)
+        this.filterVideos()
+        
+        alert('動画が削除されました')
+      } catch (error) {
+        console.error('Delete error:', error)
+        alert('削除に失敗しました: ' + error.message)
+      } finally {
+        this.deletingId = null
+      }
+    },
+
     handleLogout() {
       api.clearAuth()
       this.$router.push('/login')
@@ -243,6 +372,93 @@ export default {
     truncate(text, length) {
       if (!text) return ''
       return text.length > length ? text.substring(0, length) + '...' : text
+    },
+
+    triggerFileInput() {
+      this.$refs.fileInput.click()
+    },
+
+    async handleFileSelect(event) {
+      const file = event.target.files[0]
+      if (!file) return
+
+      // Reset file input
+      this.$refs.fileInput.value = ''
+
+      // Validate file size (max 2GB)
+      const maxSize = 2 * 1024 * 1024 * 1024
+      if (file.size > maxSize) {
+        alert('ファイルサイズが大きすぎます。2GB以下のファイルを選択してください。')
+        return
+      }
+
+      // Store file and open modal
+      this.uploadFile = file
+      this.uploadForm.title = file.name.substring(0, file.name.lastIndexOf('.')) || file.name
+      this.uploadForm.description = ''
+      this.uploadErrors.title = ''
+      this.showUploadModal = true
+    },
+
+    closeUploadModal() {
+      this.showUploadModal = false
+      this.uploadFile = null
+      this.uploadForm.title = ''
+      this.uploadForm.description = ''
+      this.uploadErrors.title = ''
+    },
+
+    validateUploadForm() {
+      this.uploadErrors.title = ''
+
+      if (!this.uploadForm.title.trim()) {
+        this.uploadErrors.title = 'タイトルを入力してください'
+        return false
+      }
+
+      if (this.uploadForm.title.length < 1 || this.uploadForm.title.length > 255) {
+        this.uploadErrors.title = 'タイトルは1～255文字で入力してください'
+        return false
+      }
+
+      return true
+    },
+
+    async confirmUpload() {
+      if (!this.validateUploadForm()) {
+        return
+      }
+
+      if (!this.uploadFile) {
+        alert('ファイルが選択されていません')
+        return
+      }
+
+      this.showUploadModal = false
+      this.uploading = true
+      this.uploadProgress = 0
+      this.error = null
+
+      try {
+        await api.uploadVideo(this.uploadFile, this.uploadForm.title, this.uploadForm.description, (progress) => {
+          this.uploadProgress = progress
+        })
+
+        this.uploadSuccess = true
+        this.uploadProgress = 0
+
+        // Refresh video list after a short delay
+        setTimeout(() => {
+          this.fetchVideos()
+        }, 1000)
+      } catch (error) {
+        console.error('Upload error:', error)
+        this.error = `アップロードに失敗しました: ${error.message}`
+        this.uploadProgress = 0
+      } finally {
+        this.uploading = false
+        this.uploadFile = null
+      }
     }
   },
   mounted() {
@@ -255,6 +471,7 @@ export default {
     // Load user info
     const user = api.getUser()
     this.userName = user?.name || 'ユーザー'
+    this.userRole = user?.role || 'user'
 
     // Fetch videos when component mounts
     this.fetchVideos()
@@ -350,11 +567,99 @@ export default {
   background: #5568d3;
 }
 
+.btn-upload {
+  padding: 0.75rem 1.5rem;
+  background: #27ae60;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background 0.3s;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.btn-upload:hover:not(:disabled) {
+  background: #229954;
+}
+
+.btn-upload:disabled {
+  background: #95a5a6;
+  cursor: not-allowed;
+  opacity: 0.8;
+}
+
 .loading,
 .error {
   text-align: center;
   padding: 3rem;
   background: white;
+  border-radius: 10px;
+}
+
+.upload-success {
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+  background: #d4edda;
+  border: 1px solid #c3e6cb;
+  color: #155724;
+  border-radius: 5px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.upload-success p {
+  margin: 0;
+  font-weight: 500;
+}
+
+.btn-close-message {
+  background: transparent;
+  border: none;
+  color: #155724;
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 0;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-close-message:hover {
+  opacity: 0.7;
+}
+
+.upload-progress {
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+  background: white;
+  border-radius: 5px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+}
+
+.upload-progress p {
+  margin: 0 0 1rem 0;
+  color: #667eea;
+  font-weight: 600;
+}
+
+.progress-bar {
+  width: 100%;
+  height: 8px;
+  background: #e9ecef;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #667eea, #764ba2);
+  transition: width 0.3s ease;
   border-radius: 10px;
 }
 
@@ -527,6 +832,29 @@ export default {
   opacity: 0.8;
 }
 
+.btn-delete {
+  flex: 1;
+  padding: 0.5rem;
+  background: #e74c3c;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.3s;
+  text-align: center;
+}
+
+.btn-delete:hover:not(:disabled) {
+  background: #c0392b;
+}
+
+.btn-delete:disabled {
+  background: #95a5a6;
+  cursor: not-allowed;
+  opacity: 0.8;
+}
+
 .btn-spinner {
   display: inline-block;
   width: 14px;
@@ -547,6 +875,190 @@ export default {
 }
 
 /* Video Player Modal */
+.video-modal {
+  display: flex;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.9);
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+/* Upload Modal */
+.upload-modal {
+  display: flex;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  align-items: center;
+  justify-content: center;
+  z-index: 1001;
+}
+
+.upload-modal-content {
+  position: relative;
+  width: 90%;
+  max-width: 500px;
+  background: white;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.5rem;
+  border-bottom: 1px solid #eee;
+  background: #f9f9f9;
+}
+
+.modal-header h2 {
+  margin: 0;
+  color: #333;
+  font-size: 1.3rem;
+}
+
+.btn-close-modal {
+  background: transparent;
+  border: none;
+  color: #999;
+  font-size: 2rem;
+  cursor: pointer;
+  padding: 0;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-close-modal:hover {
+  color: #333;
+}
+
+.modal-body {
+  padding: 1.5rem;
+}
+
+.file-info {
+  background: #f5f7fa;
+  padding: 1rem;
+  border-radius: 5px;
+  margin-bottom: 1.5rem;
+  font-size: 0.9rem;
+}
+
+.file-info p {
+  margin: 0.5rem 0;
+  color: #333;
+}
+
+.form-group {
+  margin-bottom: 1.5rem;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-weight: 600;
+  color: #333;
+  font-size: 0.95rem;
+}
+
+.required {
+  color: #e74c3c;
+}
+
+.form-input,
+.form-textarea {
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  font-size: 0.95rem;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+
+.form-input:focus,
+.form-textarea:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 5px rgba(102, 126, 234, 0.1);
+}
+
+.form-textarea {
+  resize: vertical;
+  min-height: 100px;
+}
+
+.char-count {
+  display: block;
+  margin-top: 0.3rem;
+  font-size: 0.8rem;
+  color: #999;
+  text-align: right;
+}
+
+.error-text {
+  display: block;
+  margin-top: 0.3rem;
+  font-size: 0.85rem;
+  color: #e74c3c;
+}
+
+.modal-footer {
+  display: flex;
+  gap: 1rem;
+  padding: 1.5rem;
+  border-top: 1px solid #eee;
+  background: #f9f9f9;
+  justify-content: flex-end;
+}
+
+.btn-cancel,
+.btn-confirm {
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.3s;
+}
+
+.btn-cancel {
+  background: #e9ecef;
+  color: #333;
+}
+
+.btn-cancel:hover {
+  background: #dee2e6;
+}
+
+.btn-confirm {
+  background: #667eea;
+  color: white;
+}
+
+.btn-confirm:hover:not(:disabled) {
+  background: #5568d3;
+}
+
+.btn-confirm:disabled {
+  background: #bbb;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
 .video-modal {
   display: flex;
   position: fixed;
@@ -631,7 +1143,9 @@ export default {
     flex-direction: column;
   }
 
-  .search-input {
+  .search-input,
+  .btn-refresh,
+  .btn-upload {
     width: 100%;
   }
 }

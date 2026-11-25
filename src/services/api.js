@@ -121,6 +121,98 @@ class ApiService {
   }
 
   /**
+   * Delete a video (admin only)
+   */
+  async deleteVideo(videoId) {
+    return this.request(`api/videos/delete?id=${videoId}`, {
+      method: 'DELETE',
+    })
+  }
+
+  /**
+   * Upload video file
+   */
+  async uploadVideo(file, title, description, onProgress) {
+    const url = `${this.baseURL}/api/videos/upload`
+    const formData = new FormData()
+    
+    // Add file
+    formData.append('video', file)
+    formData.append('title', title)
+    formData.append('description', description)
+
+    const headers = {}
+    if (this.token) {
+      headers['Authorization'] = `Bearer ${this.token}`
+    }
+
+    try {
+      const xhr = new XMLHttpRequest()
+
+      return new Promise((resolve, reject) => {
+        // Track upload progress
+        if (onProgress) {
+          xhr.upload.addEventListener('progress', (event) => {
+            if (event.lengthComputable) {
+              const percentComplete = (event.loaded / event.total) * 100
+              onProgress(percentComplete)
+            }
+          })
+        }
+
+        xhr.addEventListener('load', () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            try {
+              const response = JSON.parse(xhr.responseText)
+              resolve(response)
+            } catch (error) {
+              console.error('Response parsing error:', {
+                status: xhr.status,
+                responseText: xhr.responseText.substring(0, 500),
+                contentType: xhr.getResponseHeader('content-type')
+              })
+              reject(new Error(`Invalid response format: ${xhr.responseText.substring(0, 100)}`))
+            }
+          } else {
+            try {
+              const errorData = JSON.parse(xhr.responseText)
+              reject(new Error(errorData.message || `Upload failed: ${xhr.status}`))
+            } catch {
+              console.error('Error response parsing failed:', {
+                status: xhr.status,
+                responseText: xhr.responseText.substring(0, 500)
+              })
+              reject(new Error(`Upload failed: ${xhr.status} - ${xhr.responseText.substring(0, 100)}`))
+            }
+          }
+        })
+
+        xhr.addEventListener('error', () => {
+          console.error('XHR error event')
+          reject(new Error('Upload request failed'))
+        })
+
+        xhr.addEventListener('abort', () => {
+          console.error('XHR abort event')
+          reject(new Error('Upload cancelled'))
+        })
+
+        xhr.open('POST', url)
+        
+        // Add authorization header
+        if (this.token) {
+          xhr.setRequestHeader('Authorization', `Bearer ${this.token}`)
+        }
+
+        xhr.send(formData)
+      })
+    } catch (error) {
+      console.error('Upload Error:', error)
+      throw error
+    }
+  }
+
+  /**
    * Token management
    */
   setToken(token) {
