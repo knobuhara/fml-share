@@ -24,6 +24,9 @@ jobs:
         run: npm ci
 
       - name: Build Vue app
+        env:
+          VUE_APP_API_URL: /app/
+          VUE_APP_ENV: production
         run: npm run build
 
       - name: Deploy to Xserver via FTP
