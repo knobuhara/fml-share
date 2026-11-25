@@ -33,7 +33,7 @@ jobs:
           username: ${{ secrets.XSERVER_DEPLOY_DIR_USER }}
           password: ${{ secrets.XSERVER_DEPLOY_DIR_PASSWORD }}
           local-dir: ./dist/
-          server-dir: /to-wer.co.jp/public_html/app/
+          server-dir: to-wer.co.jp/public_html/app/
           state-name: .ftp-deploy-sync-state.json
           dangerous-clean-slate: false
 
