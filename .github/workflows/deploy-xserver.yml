@@ -1,4 +1,4 @@
-name: Deploy Frontend to Xserver
+name: Deploy Frontend to Xserver (FTP)
 
 on:
   push:
@@ -26,27 +26,19 @@ jobs:
       - name: Build Vue app
         run: npm run build
 
-      - name: Upload SSH key
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.XSERVER_SSH_KEY }}" > ~/.ssh/xserver.key
-          chmod 600 ~/.ssh/xserver.key
-          ssh-keyscan -H ${{ secrets.XSERVER_HOST }} >> ~/.ssh/known_hosts
+      - name: Deploy to Xserver via FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.XSERVER_HOST }}
+          username: ${{ secrets.XSERVER_FTP_USER }}
+          password: ${{ secrets.XSERVER_FTP_PASSWORD }}
+          local-dir: ./dist/
+          server-dir: /public_html/app/
+          state-name: .ftp-deploy-sync-state.json
+          dangerous-clean-slate: false
 
-      - name: Deploy to Xserver
+      - name: Deployment completed
         run: |
-          rsync -avz --delete \
-            -e "ssh -i ~/.ssh/xserver.key -p 22" \
-            dist/ \
-            ${{ secrets.XSERVER_USER }}@${{ secrets.XSERVER_HOST }}:/home/${{ secrets.XSERVER_USER }}/public_html/app/
+          echo "✅ Deployment completed successfully"
+          echo "URL: https://bears.xsrv.jp/app/"
 
-      - name: Verify deployment
-        run: |
-          ssh -i ~/.ssh/xserver.key \
-            -p 22 \
-            ${{ secrets.XSERVER_USER }}@${{ secrets.XSERVER_HOST }} \
-            "ls -la /home/${{ secrets.XSERVER_USER }}/public_html/app/"
-
-      - name: Cleanup
-        if: always()
-        run: rm -f ~/.ssh/xserver.key
