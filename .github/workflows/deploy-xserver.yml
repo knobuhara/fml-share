@@ -33,9 +33,9 @@ jobs:
           username: ${{ secrets.XSERVER_FTP_USER }}
           password: ${{ secrets.XSERVER_FTP_PASSWORD }}
           local-dir: ./dist/
-          server-dir: /public_html/app/
+          server-dir: /home/bears/to-wer.co.jp/public_html/app/
           state-name: .ftp-deploy-sync-state.json
-          dangerous-clean-slate: true
+          dangerous-clean-slate: false
 
       - name: Deployment completed
         run: |
