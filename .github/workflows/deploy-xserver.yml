@@ -1,0 +1,52 @@
+name: Deploy Frontend to Xserver
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Vue app
+        run: npm run build
+
+      - name: Upload SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.XSERVER_SSH_KEY }}" > ~/.ssh/xserver.key
+          chmod 600 ~/.ssh/xserver.key
+          ssh-keyscan -H ${{ secrets.XSERVER_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Deploy to Xserver
+        run: |
+          rsync -avz --delete \
+            -e "ssh -i ~/.ssh/xserver.key -p 22" \
+            dist/ \
+            ${{ secrets.XSERVER_USER }}@${{ secrets.XSERVER_HOST }}:/home/${{ secrets.XSERVER_USER }}/public_html/app/
+
+      - name: Verify deployment
+        run: |
+          ssh -i ~/.ssh/xserver.key \
+            -p 22 \
+            ${{ secrets.XSERVER_USER }}@${{ secrets.XSERVER_HOST }} \
+            "ls -la /home/${{ secrets.XSERVER_USER }}/public_html/app/"
+
+      - name: Cleanup
+        if: always()
+        run: rm -f ~/.ssh/xserver.key
