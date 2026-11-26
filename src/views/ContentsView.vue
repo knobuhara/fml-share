@@ -276,6 +276,10 @@ export default {
         ...video,
         playback_url: api.getUrl(video.playback_url)
       }
+      
+      // Record watch history for non-admin users
+      this.recordWatchHistory(video)
+      
       this.$nextTick(() => {
         const player = this.$refs.videoPlayer
         if (!player) return
@@ -286,6 +290,31 @@ export default {
             : '動画を再生できませんでした。再生URLと動画形式を確認してください。'
         })
       })
+    },
+
+    recordWatchHistory(video) {
+      const token = localStorage.getItem('token')
+      if (!token) return
+
+      fetch('/api/videos/watch', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + token
+        },
+        body: JSON.stringify({
+          videoId: video.id,
+          videoTitle: video.title
+        })
+      })
+        .then(response => {
+          if (!response.ok) {
+            console.warn('Watch history API error:', response.status)
+          }
+        })
+        .catch(error => {
+          console.error('Watch history error:', error)
+        })
     },
 
     handlePlaybackError() {
@@ -331,8 +360,24 @@ export default {
     },
 
     handleLogout() {
-      api.clearAuth()
-      this.$router.push('/login')
+      // Call logout API first to record session
+      fetch('/api/auth/logout', {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Bearer ' + localStorage.getItem('token')
+        }
+      })
+        .then(() => {
+          // After logout API call succeeds, clear auth and redirect
+          api.clearAuth()
+          this.$router.push('/login')
+        })
+        .catch(error => {
+          // Even if logout API fails, still clear auth and redirect
+          console.error('Logout API error:', error)
+          api.clearAuth()
+          this.$router.push('/login')
+        })
     },
 
     formatDate(dateString) {
