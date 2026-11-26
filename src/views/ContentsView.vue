@@ -296,7 +296,7 @@ export default {
       const token = localStorage.getItem('token')
       if (!token) return
 
-      fetch(`${api.baseUrl}/videos/watch`, {
+      fetch(`${api.baseURL}/api/videos/watch`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -361,7 +361,7 @@ export default {
 
     handleLogout() {
       // Call logout API first to record session
-      fetch(`${api.baseUrl}/auth/logout`, {
+      fetch(`${api.baseURL}/api/auth/logout`, {
         method: 'POST',
         headers: {
           'Authorization': 'Bearer ' + localStorage.getItem('token')
