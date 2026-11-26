@@ -136,10 +136,24 @@ class ApiService {
     const url = `${this.baseURL}/api/videos/upload`
     const formData = new FormData()
     
+    console.log('API uploadVideo called:', {
+      fileName: file?.name,
+      fileSize: file?.size,
+      fileType: file?.type,
+      isFile: file instanceof File,
+      title,
+      description: description ? `${description.substring(0, 50)}...` : ''
+    })
+
     // Add file
     formData.append('video', file)
     formData.append('title', title)
     formData.append('description', description)
+
+    console.log('FormData entries:', Array.from(formData.entries()).map(([k, v]) => [
+      k,
+      v instanceof File ? { name: v.name, size: v.size, type: v.type } : v
+    ]))
 
     const headers = {}
     if (this.token) {
@@ -161,6 +175,7 @@ class ApiService {
         }
 
         xhr.addEventListener('load', () => {
+          console.log('XHR load event:', { status: xhr.status, responseLength: xhr.responseText?.length })
           if (xhr.status >= 200 && xhr.status < 300) {
             try {
               const response = JSON.parse(xhr.responseText)
