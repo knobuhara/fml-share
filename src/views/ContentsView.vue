@@ -28,7 +28,6 @@
           ref="fileInput"
           type="file"
           accept="video/*"
-          capture="environment"
           style="display: none"
           @change="handleFileSelect"
         />
