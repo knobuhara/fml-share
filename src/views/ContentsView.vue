@@ -28,6 +28,7 @@
           ref="fileInput"
           type="file"
           accept="video/*"
+          capture="environment"
           style="display: none"
           @change="handleFileSelect"
         />
@@ -385,32 +386,52 @@ export default {
 
     async handleFileSelect(event) {
       const file = event.target.files[0]
-      if (!file) return
+      if (!file) {
+        console.warn('No file selected in input')
+        return
+      }
 
-      // Reset file input
-      this.$refs.fileInput.value = ''
+      console.log('File selected:', {
+        name: file.name,
+        type: file.type,
+        size: file.size,
+        instanceOf: file instanceof File
+      })
 
       // Validate file size (max 2GB)
       const maxSize = 2 * 1024 * 1024 * 1024
       if (file.size > maxSize) {
         alert('ファイルサイズが大きすぎます。2GB以下のファイルを選択してください。')
+        // Reset file input after validation
+        this.$refs.fileInput.value = ''
         return
       }
 
-      // Store file and open modal
+      // Store file and open modal BEFORE resetting input
       this.uploadFile = file
       this.uploadForm.title = file.name.substring(0, file.name.lastIndexOf('.')) || file.name
       this.uploadForm.description = ''
       this.uploadErrors.title = ''
       this.showUploadModal = true
+
+      console.log('File stored and modal opened:', {
+        uploadFileExists: !!this.uploadFile,
+        uploadFileName: this.uploadFile?.name
+      })
+
+      // Reset file input after storing file (iPhone Safari compatibility)
+      this.$refs.fileInput.value = ''
     },
 
     closeUploadModal() {
       this.showUploadModal = false
-      this.uploadFile = null
-      this.uploadForm.title = ''
-      this.uploadForm.description = ''
-      this.uploadErrors.title = ''
+      // Clear file and form after a small delay to ensure modal closes first
+      this.$nextTick(() => {
+        this.uploadFile = null
+        this.uploadForm.title = ''
+        this.uploadForm.description = ''
+        this.uploadErrors.title = ''
+      })
     },
 
     validateUploadForm() {
@@ -435,9 +456,25 @@ export default {
       }
 
       if (!this.uploadFile) {
-        alert('ファイルが選択されていません')
+        console.error('uploadFile is null/undefined')
+        this.uploadErrors.title = 'ファイルが選択されていません。もう一度ファイルを選択してください。'
+        this.showUploadModal = true
         return
       }
+
+      // Ensure file still exists before closing modal
+      if (!(this.uploadFile instanceof File)) {
+        console.error('uploadFile is not a File instance:', typeof this.uploadFile)
+        alert('ファイルが失われました。もう一度ファイルを選択してください。')
+        this.showUploadModal = true
+        return
+      }
+
+      console.log('Starting upload:', {
+        fileName: this.uploadFile.name,
+        fileSize: this.uploadFile.size,
+        title: this.uploadForm.title
+      })
 
       this.showUploadModal = false
       this.uploading = true
@@ -451,6 +488,8 @@ export default {
 
         this.uploadSuccess = true
         this.uploadProgress = 0
+
+        console.log('Upload completed successfully')
 
         // Refresh video list after a short delay
         setTimeout(() => {
